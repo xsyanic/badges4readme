@@ -28,6 +28,13 @@ footer a:hover {color:var(--accent);text-decoration:underline}
 .category {margin:0 0 14px;scroll-margin-top:60px}
 .category h2 {font-size:14px;font-weight:650;margin:0 0 6px}
 .items {display:flex;flex-wrap:wrap;gap:4px}
+.alphabet {display:flex;flex-wrap:wrap;gap:5px;margin:0 0 14px}
+.alphabet button {min-width:30px;padding:6px 9px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:3px}
+.alphabet button:hover,.alphabet button:focus-visible,.alphabet button.active {border-color:var(--accent);color:var(--accent);outline:none}
+.badge-preview {display:block;margin:12px 0}
+.badge-preview img {max-width:100%;height:auto;vertical-align:middle}
+.badge-result {display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}
+.badge-result button {background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:3px;padding:5px 8px}
 .item {padding: 0; gap: 0;}
 .item {display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:3px;color:var(--text);text-align:left}
 .item:hover,.item:focus-visible {border-color:var(--muted);outline:none}
@@ -90,39 +97,144 @@ const resetColors = document.querySelector('#resetColors');
 const defaultColors = { text: '#ffffff', icon: '#ffffff', background: '#111111' };
 let icons = [];
 let toastTimer;
-let visibleLimit = 240;
 let filteredIcons = [];
+let activeLetter = null;
+let activeIcon = null;
 
 function titleCase(slug){return slug.split('-').map(s=>s?s[0].toUpperCase()+s.slice(1):'').join(' ')}
 
-function parseSlugs(md){const found=[];for(const line of md.split(/\r?\n/)){if(!line.trim().startsWith('|'))continue;
-const cols=line.split('|').slice(1,-1).map(x=>x.trim());if(cols.length<2||/^[-: ]+$/.test(cols[0])||/^[-: ]+$/.test(cols[1])||/^(name|title|slug)$/i.test(cols[0])||/^(name|title|slug)$/i.test(cols[1]))continue;
-let name=cols[0].replace(/`/g,'').trim(),slug=cols[1].replace(/`/g,'').trim();if(!/^[a-z0-9-]+$/.test(slug)||!name||name.length>100)continue;found.push({name,slug})}if(found.length)return [...new Map(found.map(x=>[x.slug,x])).values()];return md.split(/\r?\n/).map(s=>s.trim()).filter(s=>/^[a-z0-9-]+$/.test(s)).map(slug=>({slug,name:titleCase(slug)}))}
+function parseSlugs(md){
+    const found=[];
+    for(const line of md.split(/\r?\n/)){
+        if(!line.trim().startsWith('|'))continue;
+        const cols=line.split('|').slice(1,-1).map(x=>x.trim());
+        if(cols.length<2||/^[-: ]+$/.test(cols[0])||/^[-: ]+$/.test(cols[1])||/^(name|title|slug)$/i.test(cols[0])||/^(name|title|slug)$/i.test(cols[1]))continue;
+        const name=cols[0].replace(/`/g,'').trim(),slug=cols[1].replace(/`/g,'').trim();
+        if(!/^[a-z0-9-]+$/.test(slug)||!name||name.length>100)continue;
+        found.push({name,slug});
+    }
+    if(found.length)return [...new Map(found.map(x=>[x.slug,x])).values()];
+    return md.split(/\r?\n/).map(s=>s.trim()).filter(s=>/^[a-z0-9-]+$/.test(s)).map(slug=>({slug,name:titleCase(slug)}));
+}
 
-function badgeUrl(icon){const name=icon.name.replace(/-/g,'--').replace(/_/g,'__');
-const bg=bgColor.value.slice(1),ic=iconColor.value.slice(1);return `https://img.shields.io/badge/${encodeURIComponent(name)}-${bg}?style=for-the-badge&logo=${encodeURIComponent(icon.slug)}&logoColor=${ic}&labelColor=${bg}&color=${bg}`}
+function badgeUrl(icon){
+    const name=icon.name.replace(/-/g,'--').replace(/_/g,'__');
+    const bg=bgColor.value.slice(1),ic=iconColor.value.slice(1),tc=textColor.value.slice(1);
+    return `https://img.shields.io/badge/${encodeURIComponent(name)}-${tc}?style=for-the-badge&logo=${encodeURIComponent(icon.slug)}&logoColor=${ic}&labelColor=${bg}&color=${bg}`;
+}
 
-function render(reset=true){if(reset)visibleLimit=240;
-const q=search.value.trim().toLowerCase();filteredIcons=icons.filter(x=>x.name.toLowerCase().includes(q)||x.slug.includes(q));
-const shown=filteredIcons.slice(0,visibleLimit);catalogue.replaceChildren();
-const groups=new Map();for(const icon of shown){const letter=(icon.name[0]||'#').toUpperCase();if(!groups.has(letter))groups.set(letter,[]);groups.get(letter).push(icon)}for(const [letter,entries] of groups){const section=document.createElement('section');section.className='category';
-const heading=document.createElement('h2');heading.textContent=letter;section.append(heading);
-const list=document.createElement('div');list.className='items';for(const icon of entries){const button=document.createElement('button');button.type='button';button.className='item';button.title=`Copy ${icon.name} badge as ${copyFormat.value}`;
-const img=document.createElement('img');img.loading='lazy';img.decoding='async';img.alt=`${icon.name} badge`;img.src=badgeUrl(icon);img.addEventListener('error',()=>{img.alt=`${icon.name} badge preview unavailable`;},{once:true});button.append(img);button.addEventListener('click',()=>copyText(badgeMarkup(icon,copyFormat.value)));list.append(button)}section.append(list);catalogue.append(section)}status.textContent=`Click a badge to copy ·  ${filteredIcons.length.toLocaleString()} badges${q?' matching search':''}${shown.length<filteredIcons.length?` · showing ${shown.length.toLocaleString()}`:''}`;if(!filteredIcons.length){const empty=document.createElement('div');empty.className='empty';empty.textContent='No badges found.';catalogue.append(empty)}if(shown.length<filteredIcons.length){const more=document.createElement('button');more.className='load-more';more.type='button';more.textContent=`Load ${Math.min(240,filteredIcons.length-shown.length)} more`;more.addEventListener('click',()=>{visibleLimit+=240;render(false)});catalogue.append(more)}}
+function badgeMarkup(icon,format){
+    const url=badgeUrl(icon);
+    const alt=icon.name.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    if(format==='url')return url;
+    if(format==='markdown')return `![${icon.name}](${url})`;
+    return `<img alt="${alt}" src="${url}">`;
+}
 
-function badgeMarkup(icon,format){const url=badgeUrl(icon);
-const alt=icon.name.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');if(format==='url')return url;if(format==='markdown')return `![${icon.name}](${url})`;return `<img alt="${alt}" src="${url}">`}
-async function copyText(value){try{await navigator.clipboard.writeText(value)}catch{const ta=document.createElement('textarea');ta.value=value;ta.style.position='fixed';ta.style.opacity='0';document.body.append(ta);ta.select();
-const ok=document.execCommand('copy');ta.remove();if(!ok){window.prompt('Copy badge:',value);return}}toast.textContent=`Copied: ${value}`;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),1100)}
+function render(){
+    const q=search.value.trim().toLowerCase();
+    filteredIcons=icons.filter(x=>x.name.toLowerCase().includes(q)||x.slug.includes(q));
+    catalogue.replaceChildren();
+    activeIcon=null;
 
-document.addEventListener('keydown',event=>{if(event.defaultPrevented||event.ctrlKey||event.metaKey||event.altKey)return;
-const target=event.target;if(target instanceof HTMLElement&&(target.isContentEditable||/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName)))return;if(event.key.length===1&&!event.key.match(/\s/)||event.key===' '){event.preventDefault();search.focus();if(event.key!==' ')search.value+=event.key;render(true)}else if(event.key==='Escape'&&document.activeElement===search){search.value='';render(true)}});
-search.addEventListener('input',()=>render(true));
-for(const picker of [textColor,iconColor,bgColor])picker.addEventListener('input',()=>render(true));
-resetColors.addEventListener('click',()=>{textColor.value=defaultColors.text;iconColor.value=defaultColors.icon;bgColor.value=defaultColors.background;render(true)});
-copyFormat.addEventListener('change',()=>{document.querySelectorAll('.item').forEach(button=>{button.title=button.title.replace(/as .+$/,'as '+copyFormat.value)})});
-(async()=>{try{const response=await fetch(SOURCE,{cache:'no-cache'});if(!response.ok)throw new Error(`HTTP ${response.status}`);icons=parseSlugs(await response.text()).sort((a,b)=>a.name.localeCompare(b.name));if(!icons.length)throw new Error('No slugs parsed');render()}catch(error){status.textContent='Could not load slugs.md. Try serving this file over localhost.';
-const link=document.createElement('a');link.href='https://github.com/simple-icons/simple-icons/blob/master/slugs.md';link.textContent='slugs.md';link.style.color='var(--accent)';catalogue.append(link);console.error(error)}})();
+    if(q){
+        status.textContent=`${filteredIcons.length.toLocaleString()} badges matching search · click a result to copy`;
+        const results=document.createElement('div');
+        for(const icon of filteredIcons.slice(0,100)){
+            const row=document.createElement('div');row.className='badge-result';
+            const label=document.createElement('span');label.textContent=icon.name;
+            const preview=document.createElement('img');preview.loading='lazy';preview.decoding='async';preview.alt='';preview.height=28;preview.src=badgeUrl(icon);
+            const copy=document.createElement('button');copy.type='button';copy.textContent='Copy';copy.addEventListener('click',()=>copyText(badgeMarkup(icon,copyFormat.value)));
+            const show=document.createElement('button');show.type='button';show.textContent='Preview';show.addEventListener('click',()=>showPreview(icon));
+            row.append(label,preview,show,copy);results.append(row);
+        }
+        catalogue.append(results);
+        if(!filteredIcons.length){const empty=document.createElement('div');empty.className='empty';empty.textContent='No badges found.';catalogue.append(empty)}
+        if(filteredIcons.length>100){const note=document.createElement('p');note.className='hint';note.textContent='Showing first 100 matches. Refine your search to narrow the results.';catalogue.append(note)}
+        return;
+    }
+
+    status.textContent='Choose a character to browse badges. Nothing loads until you select one.';
+    const alphabet=document.createElement('nav');alphabet.className='alphabet';alphabet.setAttribute('aria-label','Browse badges by first character');
+    const characters=['.','#',...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
+    for(const character of characters){
+        const button=document.createElement('button');button.type='button';button.textContent=character;
+        button.classList.toggle('active',activeLetter===character);
+        button.addEventListener('click',()=>{activeLetter=character;render();renderLetter(character)});
+        alphabet.append(button);
+    }
+    catalogue.append(alphabet);
+    if(activeLetter)renderLetter(activeLetter);
+}
+
+function renderLetter(letter){
+    let section=catalogue.querySelector('.letter-results');
+    if(section)section.remove();
+    section=document.createElement('section');section.className='letter-results';
+    const heading=document.createElement('h2');heading.className='category';heading.textContent=`${letter} badges`;
+    section.append(heading);
+    const matches=icons.filter(icon=>{
+        const first=(icon.name[0]||'#').toUpperCase();
+        return letter==='.' ? !/[A-Z0-9]/i.test(first) : letter==='#' ? /^[0-9]/.test(first) : first===letter;
+    });
+    const list=document.createElement('div');list.className='items';
+    for(const icon of matches){
+        const button=document.createElement('button');button.type='button';button.className='item';button.textContent=icon.name;
+        button.addEventListener('click',()=>showPreview(icon));
+        list.append(button);
+    }
+    if(!matches.length){const empty=document.createElement('div');empty.className='empty';empty.textContent='No badges in this group.';section.append(empty)}
+    else section.append(list);
+    catalogue.append(section);
+    status.textContent=`${matches.length.toLocaleString()} badges under “${letter}” · select a name to preview and copy`;
+}
+
+function showPreview(icon){
+    activeIcon=icon;
+    let preview=catalogue.querySelector('.badge-preview');
+    if(!preview){preview=document.createElement('section');preview.className='badge-preview';catalogue.prepend(preview)}
+    preview.replaceChildren();
+    const heading=document.createElement('h2');heading.textContent=icon.name;
+    const img=document.createElement('img');img.loading='lazy';img.decoding='async';img.alt=`${icon.name} badge`;img.src=badgeUrl(icon);
+    const copy=document.createElement('button');copy.type='button';copy.textContent=`Copy as ${copyFormat.value}`;copy.addEventListener('click',()=>copyText(badgeMarkup(icon,copyFormat.value)));
+    preview.append(heading,img,copy);
+    preview.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+async function copyText(value){
+    try{await navigator.clipboard.writeText(value)}
+    catch{
+        const ta=document.createElement('textarea');ta.value=value;ta.style.position='fixed';ta.style.opacity='0';document.body.append(ta);ta.select();
+        const ok=document.execCommand('copy');ta.remove();if(!ok){window.prompt('Copy badge:',value);return}
+    }
+    toast.textContent='Copied to clipboard';toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),1100);
+}
+
+document.addEventListener('keydown',event=>{
+    if(event.defaultPrevented||event.ctrlKey||event.metaKey||event.altKey)return;
+    const target=event.target;
+    if(target instanceof HTMLElement&&(target.isContentEditable||/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName)))return;
+    if(event.key.length===1&&!event.key.match(/\s/)||event.key===' '){
+        event.preventDefault();search.focus();if(event.key!==' ')search.value+=event.key;activeLetter=null;render();
+    }else if(event.key==='Escape'&&document.activeElement===search){search.value='';activeLetter=null;render()}
+});
+search.addEventListener('input',()=>{activeLetter=null;render()});
+for(const picker of [textColor,iconColor,bgColor])picker.addEventListener('input',()=>{if(activeIcon)showPreview(activeIcon)});
+resetColors.addEventListener('click',()=>{textColor.value=defaultColors.text;iconColor.value=defaultColors.icon;bgColor.value=defaultColors.background;if(activeIcon)showPreview(activeIcon)});
+copyFormat.addEventListener('change',()=>{const button=catalogue.querySelector('.badge-preview button');if(button)button.textContent=`Copy as ${copyFormat.value}`});
+
+(async()=>{
+    try{
+        const response=await fetch(SOURCE,{cache:'no-cache'});
+        if(!response.ok)throw new Error(`HTTP ${response.status}`);
+        icons=parseSlugs(await response.text()).sort((a,b)=>a.name.localeCompare(b.name));
+        if(!icons.length)throw new Error('No slugs parsed');
+        render();
+    }catch(error){
+        status.textContent='Could not load slugs.md. Try serving this file over localhost.';
+        const link=document.createElement('a');link.href='https://github.com/simple-icons/simple-icons/blob/master/slugs.md';link.textContent='slugs.md';link.style.color='var(--accent)';catalogue.append(link);console.error(error)
+    }
+})();
 </script>
 </body>
 </html>
